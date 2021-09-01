@@ -73,9 +73,11 @@ stackGraphAddSymbols (StackGraph sg) syms = do
         SG.stackGraphAddSymbols sg (fromIntegral len) str lens (castPtr symptr)
       VS.freeze syms
 
+
 stackGraphSymbols :: StackGraph -> IO (V.Vector Symbol)
 stackGraphSymbols (StackGraph sg) = do
   syms <- SG.stackGraphSymbols sg
+  print syms
   bridgeVector syms
 
 newtype Handle t = Handle Int32
@@ -192,10 +194,10 @@ instance HasVector Symbol SG.Symbols where
     let count = getField @"count" item
     let syms = getField @"symbols" item
     print item
-    V.generateM (fromIntegral count) $ \n -> do
+    V.generateM (fromIntegral count - 1) $ \n -> do
       curr :: SG.Symbol <- peekByteOff syms (n * sizeOf (undefined :: SG.Symbol))
-      print curr
-      assert (SG.symbol_len curr >= 0) (pure ())
-      if SG.symbol_len curr == 0
+      let siz = assert (fromIntegral @_ @Int (SG.symbol_len curr) >= 0) (fromIntegral (SG.symbol_len curr))
+      print siz
+      if siz == 0
         then pure mempty
-        else Symbol <$> B.packCStringLen (getField @"symbol" curr, fromIntegral (SG.symbol_len curr))
+        else Symbol <$> B.packCStringLen (getField @"symbol" curr, siz)
