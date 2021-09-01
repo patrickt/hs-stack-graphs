@@ -1,5 +1,6 @@
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE DuplicateRecordFields #-}
@@ -233,6 +234,18 @@ instance Storable SymbolStack where
 
 data ScopeStackCell = ScopeStackCell { head :: NodeHandle, tail :: ScopeStackCellHandle }
 
+instance Storable ScopeStackCell where
+  sizeOf _ = {#sizeof scope_stack_cell#}
+  alignment _ = {#alignof scope_stack_cell#}
+  peek p = do
+    bod <- {#get scope_stack_cell->head #} p
+    len <- {#get scope_stack_cell->tail #} p
+    pure (ScopeStackCell (fromIntegral bod) (fromIntegral len))
+  poke p (ScopeStackCell bod len) = do
+    {#set scope_stack_cell.head #} p (fromIntegral bod)
+    {#set scope_stack_cell.tail #} p (fromIntegral len)
+
+
 {#pointer *scope_stack_cell as ScopeStackCellPtr -> ScopeStackCell #}
 
 data ScopeStackCells = ScopeStackCells { cells :: ScopeStackCellPtr, count :: CSize }
@@ -251,6 +264,17 @@ instance Storable ScopeStackCells where
 
 data PathEdge = PathEdge { source_node_id :: NodeId, precedence :: Int32 }
 
+instance Storable PathEdge where
+  sizeOf _ = {#sizeof path_edge #}
+  alignment _ = {#alignof path_edge #}
+  peek p = do
+    node <- peek (castPtr p)
+    prec <- {#get path_edge->precedence #} p
+    pure (PathEdge node (fromIntegral prec))
+  poke p (PathEdge node prec) = do
+    poke (castPtr p) node
+    {#set path_edge.precedence #} p (fromIntegral prec)
+
 type PathEdgeListCellHandle = {#type path_edge_list_cell_handle#}
 
 data PathEdgeListCell = PathEdgeListCell
@@ -258,6 +282,19 @@ data PathEdgeListCell = PathEdgeListCell
   , tail :: PathEdgeListCellHandle
   , reversed :: PathEdgeListCellHandle
   }
+
+instance Storable PathEdgeListCell where
+  sizeOf _ = {#sizeof path_edge_list_cell #}
+  alignment _ = {#alignof path_edge_list_cell #}
+  peek p = do
+    bod <- peek (castPtr p)
+    dir <- {#get path_edge_list_cell->tail #} p
+    len <- {#get path_edge_list_cell->reversed #} p
+    pure (PathEdgeListCell bod dir len)
+  poke p (PathEdgeListCell bod dir len) = do
+    poke (castPtr p) bod
+    {#set path_edge_list_cell.tail #} p (fromIntegral dir)
+    {#set path_edge_list_cell.reversed #} p (fromIntegral len)
 
 {#pointer *path_edge_list_cell as PathEdgeListCellPtr -> PathEdgeListCell #}
 
@@ -280,6 +317,19 @@ data PathEdgeList = PathEdgeList
   , length :: CSize
   }
 
+instance Storable PathEdgeList where
+  sizeOf _ = {#sizeof path_edge_list #}
+  alignment _ = {#alignof path_edge_list #}
+  peek p = do
+    bod <- {#get path_edge_list->cells #} p
+    dir <- {#get path_edge_list->direction #} p
+    len <- {#get path_edge_list->length #} p
+    pure (PathEdgeList bod (toEnum (fromIntegral dir)) (fromIntegral len))
+  poke p (PathEdgeList bod dir len) = do
+    {#set path_edge_list.cells #} p bod
+    {#set path_edge_list.direction #} p (fromIntegral (fromEnum dir))
+    {#set path_edge_list.length #} p (fromIntegral len)
+
 data EdgeList = EdgeList
   { cells :: PathEdgeListCellHandle
   , direction :: DequeDirection
@@ -294,6 +344,35 @@ data Path = Path
   , edges :: PathEdgeList
   }
 
+sizeOf' :: forall a . Storable a => Int
+sizeOf' = sizeOf (undefined :: a)
+
+advance :: forall t a . Storable t => Ptr t -> Ptr a
+advance p = castPtr p `plusPtr` (sizeOf' @t)
+
+instance Storable Path where
+  sizeOf _ = {#sizeof path#}
+  alignment _ = {#alignof path#}
+  peek p = do
+    sn <- {#get path->start_node #} p
+    en <- {#get path->end_node #} p
+    let p1 = castPtr p `plusPtr` (sizeOf' @NodeHandle * 2)
+    sym <- peek p1
+    let p2 = advance @SymbolStack p1
+    sco <- peek p2
+    let p3 = advance @ScopeStack p2
+    edg <- peek p3
+    pure (Path sn en sym sco edg)
+  poke p (Path sn en sym sco edg) = do
+    {#set path->start_node#} p sn
+    {#set path->end_node#} p en
+    let p1 = castPtr p `plusPtr` (sizeOf' @NodeHandle * 2)
+    poke p1 sym
+    let p2 = advance @SymbolStack p1
+    poke p2 sco
+    let p3 = advance @ScopeStack p2
+    poke p3 edg
+
 type PartialScopeStackCellHandle = {#type partial_scope_stack_cell_handle#}
 
 type ScopeStackVariable = {#type scope_stack_variable#}
@@ -304,7 +383,31 @@ data PartialScopeStack = PartialScopeStack
   , variable :: ScopeStackVariable
   }
 
+instance Storable PartialScopeStack where
+  sizeOf _ = {#sizeof partial_scope_stack#}
+  alignment _ = {#alignof partial_scope_stack#}
+  peek p = do
+    hdl <- {#get partial_scope_stack->cells #} p
+    dir <- {#get partial_scope_stack->direction #} p
+    var <- {#get partial_scope_stack->variable #} p
+    pure (PartialScopeStack hdl (toEnum (fromIntegral dir)) var)
+  poke p (PartialScopeStack hdl dir var) = do
+    {#set partial_scope_stack->cells #} p hdl
+    {#set partial_scope_stack->direction #} p (fromIntegral (fromEnum dir))
+    {#set partial_scope_stack->variable #} p var
+
 data PartialScopedSymbol = PartialScopedSymbol { symbol :: SymbolHandle, scopes :: PartialScopeStack }
+
+instance Storable PartialScopedSymbol where
+  sizeOf _ = {#sizeof partial_scoped_symbol #}
+  alignment _ = {#alignof partial_scoped_symbol #}
+  peek p = do
+    sym <- {#get partial_scoped_symbol->symbol #} p
+    sco <- peek (castPtr p `plusPtr` sizeOf (undefined :: SymbolHandle))
+    pure (PartialScopedSymbol sym sco)
+  poke p (PartialScopedSymbol sym sco) = do
+    {#set partial_scoped_symbol.symbol #} p (fromIntegral sym)
+    poke (castPtr p `plusPtr` sizeOf (undefined :: SymbolHandle)) sco
 
 type PartialSymbolStackCellHandle = {#type partial_symbol_stack_cell_handle#}
 
@@ -313,6 +416,19 @@ data PartialSymbolStackCell = PartialSymbolStackCell
   , tail :: PartialSymbolStackCellHandle
   , reversed :: PartialSymbolStackCellHandle
   }
+
+instance Storable PartialSymbolStackCell where
+  sizeOf _ = {#sizeof partial_symbol_stack_cell #}
+  alignment _ = {#alignof partial_symbol_stack_cell #}
+  peek p = do
+    bod <- peek (castPtr p)
+    dir <- {#get partial_symbol_stack_cell->tail #} p
+    len <- {#get partial_symbol_stack_cell->reversed #} p
+    pure (PartialSymbolStackCell bod dir len)
+  poke p (PartialSymbolStackCell bod dir len) = do
+    poke (castPtr p) bod
+    {#set partial_symbol_stack_cell.tail #} p (fromIntegral dir)
+    {#set partial_symbol_stack_cell.reversed #} p (fromIntegral len)
 
 {#pointer *partial_symbol_stack_cell as PartialSymbolStackCellPtr -> PartialSymbolStackCell #}
 
@@ -333,6 +449,17 @@ data PartialSymbolStack = PartialSymbolStack
   { cells :: PartialSymbolStackCellHandle
   , direction :: DequeDirection
   }
+
+instance Storable PartialSymbolStack where
+  sizeOf _ = {#sizeof partial_symbol_stack #}
+  alignment _ = {#alignof partial_symbol_stack #}
+  peek p = do
+    bod <- {#get partial_symbol_stack->cells #} p
+    dir <- {#get partial_symbol_stack->direction #} p
+    pure (PartialSymbolStack (fromIntegral bod) (toEnum (fromIntegral dir)))
+  poke p (PartialSymbolStack bod dir) = do
+    {#set partial_symbol_stack.cells #} p bod
+    {#set partial_symbol_stack.direction #} p (fromIntegral (fromEnum dir))
 
 data PartialScopeStackCell = PartialScopeStackCell
   { head :: NodeHandle
@@ -402,15 +529,50 @@ data PartialPathEdgeList = PartialPathEdgeList
   , direction :: DequeDirection
   , length :: CSize
   }
+
+instance Storable PartialPathEdgeList where
+  sizeOf _ = {#sizeof partial_path_edge_list #}
+  alignment _ = {#alignof partial_path_edge_list #}
+  peek p = do
+    bod <- {#get partial_path_edge_list->cells #} p
+    dir <- {#get partial_path_edge_list->direction #} p
+    len <- {#get partial_path_edge_list->length #} p
+    pure (PartialPathEdgeList bod (toEnum (fromIntegral dir)) (fromIntegral len))
+  poke p (PartialPathEdgeList bod dir len) = do
+    {#set partial_path_edge_list.cells #} p bod
+    {#set partial_path_edge_list.direction #} p (fromIntegral (fromEnum dir))
+    {#set partial_path_edge_list.length #} p (fromIntegral len)
+
 data PartialPath = PartialPath
   { startNode :: NodeHandle
   , endNode :: NodeHandle
-  , symbolStackPreconditicon :: PartialSymbolStack
+  , symbolStackPrecondition :: PartialSymbolStack
   , symbolStackPostcondition :: PartialSymbolStack
   , scopeStackPrecondition :: PartialScopeStack
   , scopeStackPostcondition :: PartialScopeStack
   , edges :: PartialPathEdgeList
   }
+
+instance Storable PartialPath where
+  sizeOf _ = {#sizeof partial_path#}
+  alignment _ = {#sizeof partial_path#}
+  peek p = do
+    sn <- {#get partial_path->start_node #} p
+    en <- {#get partial_path->end_node #} p
+    sympre <- peekByteOff (castPtr p) {#offsetof partial_path->symbol_stack_precondition#}
+    sympos <- peekByteOff (castPtr p) {#offsetof partial_path->symbol_stack_postcondition#}
+    scopre <- peekByteOff (castPtr p) {#offsetof partial_path->scope_stack_precondition#}
+    scopos <- peekByteOff (castPtr p) {#offsetof partial_path->scope_stack_postcondition#}
+    edg <- peekByteOff (castPtr p) {#offsetof partial_path->edges#}
+    pure (PartialPath sn en sympre sympos scopre scopos edg)
+  poke p (PartialPath sn en sympre sympos scopre scopos edg) = do
+    {#set partial_path->start_node #} p sn
+    {#set partial_path->end_node #} p en
+    pokeByteOff (castPtr p) {#offsetof partial_path->symbol_stack_precondition#} sympre
+    pokeByteOff (castPtr p) {#offsetof partial_path->symbol_stack_postcondition#} sympos
+    pokeByteOff (castPtr p) {#offsetof partial_path->scope_stack_precondition#} scopre
+    pokeByteOff (castPtr p) {#offsetof partial_path->scope_stack_postcondition#} scopos
+    pokeByteOff (castPtr p) {#offsetof partial_path->edges#} edg
 
 {#pointer *partial_path as PartialPathPtr -> PartialPath #}
 
