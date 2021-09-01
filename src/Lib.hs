@@ -1,5 +1,6 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 module Lib
     ( someFunc
     ) where
@@ -12,7 +13,11 @@ import GHC.Records
 
 someFunc :: IO ()
 someFunc = do
-  x <- stackGraphNew
-  syms <- stackGraphSymbols x
-  print x
-  print (getField @"count" syms)
+  sg <- stackGraphNew
+  withCStringLen "testlent" $ \(str, len) ->
+    withArray [4, 4] $ \lengths -> do
+      handles <- mallocArray @SymbolHandle 1
+      stackGraphAddSymbols sg 1 str lengths handles
+      x :: [SymbolHandle] <- peekArray 1 handles
+      syms <- stackGraphSymbols sg
+      print syms

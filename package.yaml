@@ -29,6 +29,9 @@ ghc-options: "-optc=-Wno-nullability-completeness -optc=-Wno-expansion-to-define
 library:
   source-dirs: src
   extra-libraries: stack_graphs
+  c-sources: cbits/hs_stack_graphs.c
+  include-dirs:         include
+  cc-options: -Wno-nullability-completeness
 
 executables:
   hs-stack-graphs-exe:

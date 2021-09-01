@@ -1,4 +1,5 @@
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE DisambiguateRecordFields #-}
@@ -11,9 +12,11 @@
 
 module StackGraph.Foreign where
 
+import Debug.Trace
 import Foreign.C.Types
 import Foreign.Ptr
 import Foreign.Marshal.Alloc
+import GHC.Records
 import Foreign.Storable
 import Data.ByteString (ByteString)
 import Data.ByteString qualified as B
@@ -27,6 +30,7 @@ import Data.Coerce
 import Data.Word
 
 #include "stack-graphs.h"
+#include "hs_stack_graphs.h"
 
 {#context prefix = "sg_" #}
 
@@ -46,13 +50,16 @@ data PathArena
 data PathList
 
 {#pointer *path_arena as PathArenaPtr -> PathArena #}
-{#pointer *path_list as PathListPtr -> PathArena #}
+{#pointer *path_list as PathListPtr -> PathList #}
 
 data StackGraph
 
 {#pointer *stack_graph as StackGraphPtr -> StackGraph #}
 
 data Symbol = Symbol { symbol :: CString, symbol_len :: CSize }
+  deriving Show
+
+{#pointer *symbol as SymbolPtr -> Symbol #}
 
 instance Storable Symbol where
   sizeOf _ = {#sizeof symbol#}
@@ -65,7 +72,10 @@ instance Storable Symbol where
     {#set symbol.symbol #} p bod
     {#set symbol.symbol_len #} p (fromIntegral len)
 
-data Symbols = Symbols { symbols :: Ptr Symbol, count :: CSize }
+data Symbols = Symbols { symbols :: SymbolPtr, count :: CSize }
+  deriving stock Show
+
+{#pointer *symbols as SymbolsPtr -> Symbols #}
 
 instance Storable Symbols where
   sizeOf _ = {#sizeof symbols#}
@@ -73,20 +83,18 @@ instance Storable Symbols where
   peek p = do
     bod <- {#get symbols->symbols #} p
     len <- {#get symbols->count #} p
-    pure (Symbols (castPtr bod) (fromIntegral len))
+    pure (Symbols bod (fromIntegral len))
   poke p (Symbols bod len) = do
-    {#set symbols.symbols #} p (castPtr bod)
+    {#set symbols.symbols #} p bod
     {#set symbols.count #} p (fromIntegral len)
-
-unsafeHandleFromPtr :: Ptr () -> Int32
-unsafeHandleFromPtr p = let
-    ip = ptrToIntPtr p
-    IntPtr val = ip
-  in fromIntegral val
 
 type SymbolHandle = {#type symbol_handle#}
 
+{#pointer *symbol_handle as SymbolHandlePtr -> SymbolHandle #}
+
 data File = File { name :: CString, name_len :: CSize }
+
+{#pointer *file as FilePtr -> File #}
 
 instance Storable File where
   sizeOf _ = {#sizeof file#}
@@ -99,7 +107,7 @@ instance Storable File where
     {#set file.name #} p bod
     {#set file.name_len #} p (fromIntegral len)
 
-data Files = Files { files :: Ptr File, count :: CSize }
+data Files = Files { files :: FilePtr, count :: CSize }
 
 instance Storable Files where
   sizeOf _ = {#sizeof files#}
@@ -107,14 +115,16 @@ instance Storable Files where
   peek p = do
     bod <- {#get files->files #} p
     len <- {#get files->count #} p
-    pure (Files (castPtr bod) (fromIntegral len))
+    pure (Files bod (fromIntegral len))
   poke p (Files bod len) = do
-    {#set files.files #} p (castPtr bod)
+    {#set files.files #} p bod
     {#set files.count #} p (fromIntegral len)
 
 type FileHandle = {#type file_handle#}
 
 data NodeId = NodeId { file :: FileHandle, local_id :: Word32 }
+
+{#pointer *node_id as NodeIdPtr -> NodeId #}
 
 instance Storable NodeId where
   sizeOf _ = {#sizeof node_id#}
@@ -163,7 +173,9 @@ type SymbolStackCellHandle = {#type symbol_stack_cell_handle#}
 
 data SymbolStackCell = SymbolStackCell { head :: ScopedSymbol, tail :: SymbolStackCellHandle }
 
-data SymbolStackCells = SymbolStackCells { cells :: Ptr SymbolStackCell, count :: CSize }
+{#pointer *symbol_stack_cell as SymbolStackCellPtr -> SymbolStackCell #}
+
+data SymbolStackCells = SymbolStackCells { cells :: SymbolStackCellPtr, count :: CSize }
 
 instance Storable SymbolStackCells where
   sizeOf _ = {#sizeof symbol_stack_cells#}
@@ -171,7 +183,7 @@ instance Storable SymbolStackCells where
   peek p = do
     bod <- {#get symbol_stack_cells->cells #} p
     len <- {#get symbol_stack_cells->count #} p
-    pure (SymbolStackCells (castPtr bod) (fromIntegral len))
+    pure (SymbolStackCells bod (fromIntegral len))
   poke p (SymbolStackCells bod len) = do
     {#set symbol_stack_cells.cells #} p (castPtr bod)
     {#set symbol_stack_cells.count #} p (fromIntegral len)
@@ -180,7 +192,9 @@ data SymbolStack = SymbolStack { cells :: Ptr SymbolStackCellHandle, length :: C
 
 data ScopeStackCell = ScopeStackCell { head :: NodeHandle, tail :: ScopeStackCellHandle }
 
-data ScopeStackCells = ScopeStackCells { cells :: Ptr ScopeStackCell, count :: CSize }
+{#pointer *scope_stack_cell as ScopeStackCellPtr -> ScopeStackCell #}
+
+data ScopeStackCells = ScopeStackCells { cells :: ScopeStackCellPtr, count :: CSize }
 
 instance Storable ScopeStackCells where
   sizeOf _ = {#sizeof scope_stack_cells#}
@@ -204,7 +218,9 @@ data PathEdgeListCell = PathEdgeListCell
   , reversed :: PathEdgeListCellHandle
   }
 
-data PathEdgeListCells = PathEdgeListCells { cells :: Ptr PathEdgeListCell, count :: CSize }
+{#pointer *path_edge_list_cell as PathEdgeListCellPtr -> PathEdgeListCell #}
+
+data PathEdgeListCells = PathEdgeListCells { cells :: PathEdgeListCellPtr, count :: CSize }
 
 instance Storable PathEdgeListCells where
   sizeOf _ = {#sizeof path_edge_list_cells #}
@@ -212,9 +228,9 @@ instance Storable PathEdgeListCells where
   peek p = do
     bod <- {#get path_edge_list_cells->cells #} p
     len <- {#get path_edge_list_cells->count #} p
-    pure (PathEdgeListCells (castPtr bod) (fromIntegral len))
+    pure (PathEdgeListCells bod (fromIntegral len))
   poke p (PathEdgeListCells bod len) = do
-    {#set path_edge_list_cells.cells #} p (castPtr bod)
+    {#set path_edge_list_cells.cells #} p bod
     {#set path_edge_list_cells.count #} p (fromIntegral len)
 
 data PathEdgeList = PathEdgeList
@@ -257,7 +273,9 @@ data PartialSymbolStackCell = PartialSymbolStackCell
   , reversed :: PartialSymbolStackCellHandle
   }
 
-data PartialSymbolStackCells = PartialSymbolStackCells { cells :: Ptr PartialSymbolStackCell, count :: CSize }
+{#pointer *partial_symbol_stack_cell as PartialSymbolStackCellPtr -> PartialSymbolStackCell #}
+
+data PartialSymbolStackCells = PartialSymbolStackCells { cells :: PartialSymbolStackCellPtr, count :: CSize }
 
 instance Storable PartialSymbolStackCells where
   sizeOf _ = {#sizeof partial_symbol_stack_cells #}
@@ -281,7 +299,9 @@ data PartialScopeStackCell = PartialScopeStackCell
   , reversed :: PathEdgeListCellHandle
   }
 
-data PartialScopeStackCells = PartialScopeStackCells { cells :: Ptr PartialScopeStackCell, count :: CSize }
+{#pointer *partial_scope_stack_cell as PartialScopeStackCellPtr -> PartialScopeStackCell #}
+
+data PartialScopeStackCells = PartialScopeStackCells { cells :: PartialScopeStackCellPtr, count :: CSize }
 
 data PartialPathEdge = PartialPathEdge { sourceNode :: NodeId, precedence :: Int32 }
 
@@ -289,12 +309,12 @@ instance Storable PartialPathEdge where
   sizeOf _ = {#sizeof partial_path_edge#}
   alignment _ = {#alignof partial_path_edge#}
   peek p = do
-    bod <- {#get partial_path_edge->source_node_id #} p
-    len <- {#get partial_path_edge->precedence #} p
-    pure (PartialPathEdge (unsafeCoerce bod) (fromIntegral len))
+    bod <- peekByteOff (castPtr p) 0
+    len <- peekByteOff (castPtr p) {#offsetof partial_path_edge->precedence#}
+    pure (PartialPathEdge bod len)
   poke p (PartialPathEdge bod len) = do
-    {#set partial_path_edge.source_node_id #} p (unsafeCoerce bod)
-    {#set partial_path_edge.precedence #} p (fromIntegral len)
+    pokeByteOff (castPtr p) 0 bod
+    pokeByteOff (castPtr p) {#offsetof partial_path_edge->precedence#} len
 
 
 type PartialPathEdgeListCellHandle = {#type partial_path_edge_list_cell_handle#}
@@ -360,14 +380,19 @@ castPeek p = do
 {#fun unsafe partial_path_database_new as ^ {} -> `PartialPathDatabasePtr' #}
 {#fun unsafe partial_path_database_free as ^ {`PartialPathDatabasePtr'} -> `()' #}
 
-{#fun unsafe stack_graph_symbols as ^ {`StackGraphPtr'} -> `Symbols' castPeek* #}
+{#fun stack_graph_symbols_ptr as ^ {`StackGraphPtr', `SymbolsPtr'} -> `()' #}
 
-{#fun unsafe stack_graph_add_symbols
+stackGraphSymbols :: StackGraphPtr -> IO Symbols
+stackGraphSymbols sg = alloca $ \symptr -> do
+  stackGraphSymbolsPtr sg symptr
+  peek symptr
+
+{#fun unsafe stack_graph_add_symbols as ^
   { id `StackGraphPtr',
     fromIntegral `CSize',
-    castPtr `Ptr CString',
+    castPtr `CString',
     castPtr `Ptr CSize',
-    castPtr `Ptr SymbolHandle'} -> `()' #}
+    castPtr `SymbolHandlePtr'} -> `()' #}
 
 {#fun unsafe stack_graph_files as ^ {`StackGraphPtr'} -> `Files' castPeek* #}
 
@@ -445,5 +470,5 @@ castPeek p = do
     castPtr `Ptr ScopeStackVariable',
     castPtr `Ptr PartialSymbolStack'} -> `()' #}
 
-{#fun unsafe partial_path_arena_partial_path_edge_list_cells as ^
-  { castPtr `PartialPathArenaPtr' } -> `PartialPathEdgeListCells' castPeek* #}
+-- {#fun unsafe partial_path_arena_partial_path_edge_list_cells as ^
+--   { castPtr `PartialPathArenaPtr' } -> `PartialPathEdgeListCells' castPeek* #}

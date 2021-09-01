@@ -32,6 +32,11 @@ library
   hs-source-dirs:
       src
   ghc-options: -optc=-Wno-nullability-completeness -optc=-Wno-expansion-to-defined
+  cc-options: -Wno-nullability-completeness
+  include-dirs:
+      include
+  c-sources:
+      cbits/hs_stack_graphs.c
   extra-libraries:
       stack_graphs
   build-depends:
