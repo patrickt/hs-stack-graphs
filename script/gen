@@ -1,0 +1,58 @@
+#!/usr/bin/env ruby
+
+type = ARGV[0].strip
+
+class String
+  def underscore
+    self.gsub(/::/, '/').
+    gsub(/([A-Z]+)([A-Z][a-z])/,'\1_\2').
+    gsub(/([a-z\d])([A-Z])/,'\1_\2').
+    tr("-", "_").
+    downcase
+  end
+end
+
+if type == "getter"
+  to = ARGV[2]
+  tosnake = to.underscore
+  from = ARGV[1]
+  fromsnake = from.underscore
+  puts <<CODE
+{#fun unsafe #{fromsnake}_#{tosnake} as ^
+  { castPtr `#{from}Ptr' } -> `#{to}' castPeek* #}
+CODE
+elsif type == "deque"
+  it = ARGV[1]
+  itsnake = it.underscore
+puts <<CODE
+  instance Storable #{it} where
+    sizeOf _ = {#sizeof #{itsnake}#}
+    alignment _ = {#alignof #{itsnake}#}
+    peek p = do
+      hd <- {#get #{itsnake}->head #} p
+      tl <- {#get #{itsnake}->tail #} p
+      rec <- {#get #{itsnake}->reversed #} p
+      pure (#{it} (castPtr bod) (fromIntegral len))
+    poke p (#{it} hd tl rec) = do
+      {#set #{itsnake}.head #} p (castPtr bod)
+      {#set #{itsnake}.tail #} p tl
+      {#set #{itsnake}.tail #} p rec
+CODE
+elsif type == "storable"
+  it = ARGV[1]
+  itsnake = it.underscore
+puts <<CODE
+  instance Storable #{it} where
+    sizeOf _ = {#sizeof #{itsnake}#}
+    alignment _ = {#alignof #{itsnake}#}
+    peek p = do
+      bod <- {#get #{itsnake}->cells #} p
+      len <- {#get #{itsnake}->count #} p
+      pure (#{it} (castPtr bod) (fromIntegral len))
+    poke p (#{it} bod len) = do
+      {#set #{itsnake}.cells #} p (castPtr bod)
+      {#set #{itsnake}.count #} p (fromIntegral len)
+CODE
+else
+  puts "unknown: " + type
+end

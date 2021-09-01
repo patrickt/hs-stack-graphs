@@ -1,0 +1,3 @@
+[submodule "vendor/stack-graphs"]
+	path = vendor/stack-graphs
+	url = git@github.com:github/stack-graphs.git

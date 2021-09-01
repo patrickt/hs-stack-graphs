@@ -21,9 +21,14 @@ description:         Please see the README on GitHub at <https://github.com/gith
 
 dependencies:
 - base >= 4.7 && < 5
+- bytestring
+- vector >= 0.12 && <0.13
+
+ghc-options: "-optc=-Wno-nullability-completeness -optc=-Wno-expansion-to-defined"
 
 library:
   source-dirs: src
+  extra-libraries: stack_graphs
 
 executables:
   hs-stack-graphs-exe:
@@ -35,6 +40,7 @@ executables:
     - -with-rtsopts=-N
     dependencies:
     - hs-stack-graphs
+
 
 tests:
   hs-stack-graphs-test:
