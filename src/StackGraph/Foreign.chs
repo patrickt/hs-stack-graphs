@@ -325,21 +325,36 @@ data PartialPathEdgeListCell = PartialPathEdgeListCell
   , reversed :: PartialPathEdgeListCellHandle
   }
 
--- instance Storable PartialPathEdgeListCell where
---   sizeOf _ = {#sizeof partial_path_edge_list_cell #}
---   alignment _ = {#alignof partial_path_edge_list_cell#}
---   peek p = do
---     hd <- {#get struct partial_path_edge_list_cell->head #} p
---     tl <- {#get struct partial_path_edge_list_cell->tail #} p
---     rec <- {#get struct partial_path_edge_list_cell->reversed #} p
---     pure (PartialPathEdgeListCell hd tl rec)
---   poke p (PartialPathEdgeListCell hd tl rec) = do
---     {#set struct partial_path_edge_list_cell.head #} p hd
---     {#set struct partial_path_edge_list_cell.tail #} p tl
---     {#set struct partial_path_edge_list_cell.reversed #} p rec
+{#pointer *partial_path_edge_list_cell as PartialPathEdgeListCellPtr -> PartialPathEdgeListCell #}
+
+instance Storable PartialPathEdgeListCell where
+  sizeOf _ = {#sizeof partial_path_edge_list_cell#}
+  alignment _ = {#alignof partial_path_edge_list_cell#}
+  peek p = do
+    bod <- peekByteOff (castPtr p) 0
+    len <- peekByteOff (castPtr p) {#offsetof partial_path_edge_list_cell->tail#}
+    rev <- peekByteOff (castPtr p) {#offsetof partial_path_edge_list_cell->reversed#}
+    pure (PartialPathEdgeListCell bod len rev)
+  poke p (PartialPathEdgeListCell bod len rev) = do
+    pokeByteOff (castPtr p) 0 bod
+    pokeByteOff (castPtr p) {#offsetof partial_path_edge_list_cell->tail#} len
+    pokeByteOff (castPtr p) {#offsetof partial_path_edge_list_cell->reversed#} rev
 
 
-data PartialPathEdgeListCells = PartialPathEdgeListCells { cells :: Ptr PartialPathEdgeListCell, count :: CSize }
+data PartialPathEdgeListCells = PartialPathEdgeListCells { cells :: PartialPathEdgeListCellPtr, count :: CSize }
+
+{#pointer *partial_path_edge_list_cells as PartialPathEdgeListCellsPtr -> PartialPathEdgeListCells #}
+
+instance Storable PartialPathEdgeListCells where
+  sizeOf _ = {#sizeof partial_path_edge_list_cells #}
+  alignment _ = {#alignof partial_path_edge_list_cells #}
+  peek p = do
+    bod <- {#get partial_path_edge_list_cells->cells #} p
+    len <- {#get partial_path_edge_list_cells->count #} p
+    pure (PartialPathEdgeListCells (castPtr bod) (fromIntegral len))
+  poke p (PartialPathEdgeListCells bod len) = do
+    {#set partial_path_edge_list_cells.cells #} p (castPtr bod)
+    {#set partial_path_edge_list_cells.count #} p (fromIntegral len)
 
 data PartialPathEdgeList = PartialPathEdgeList
   { cells :: PartialPathEdgeListCellHandle
@@ -380,12 +395,7 @@ castPeek p = do
 {#fun unsafe partial_path_database_new as ^ {} -> `PartialPathDatabasePtr' #}
 {#fun unsafe partial_path_database_free as ^ {`PartialPathDatabasePtr'} -> `()' #}
 
-{#fun stack_graph_symbols_ptr as ^ {`StackGraphPtr', `SymbolsPtr'} -> `()' #}
-
-stackGraphSymbols :: StackGraphPtr -> IO Symbols
-stackGraphSymbols sg = alloca $ \symptr -> do
-  stackGraphSymbolsPtr sg symptr
-  peek symptr
+{#fun stack_graph_symbols_ptr as stackGraphSymbols {`StackGraphPtr', alloca- `Symbols' peek* } -> `()' #}
 
 {#fun unsafe stack_graph_add_symbols as ^
   { id `StackGraphPtr',
@@ -470,5 +480,12 @@ stackGraphSymbols sg = alloca $ \symptr -> do
     castPtr `Ptr ScopeStackVariable',
     castPtr `Ptr PartialSymbolStack'} -> `()' #}
 
--- {#fun unsafe partial_path_arena_partial_path_edge_list_cells as ^
---   { castPtr `PartialPathArenaPtr' } -> `PartialPathEdgeListCells' castPeek* #}
+{#fun partial_path_arena_partial_path_edge_list_cells_ptr as partialPathArenaPartialPathEdgeListCells
+  { `PartialPathArenaPtr', alloca- `PartialPathEdgeListCells' peek* } -> `()' #}
+
+{#fun unsafe partial_path_arena_add_partial_path_edge_lists as ^
+  { id `PartialPathArenaPtr',
+    fromIntegral `CSize',
+    castPtr `Ptr PartialScopedSymbol',
+    castPtr `Ptr CSize',
+    castPtr `Ptr PartialSymbolStack'} -> `()' #}
