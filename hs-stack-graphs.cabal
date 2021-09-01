@@ -27,6 +27,7 @@ library
   exposed-modules:
       Lib
       StackGraph.Foreign
+      StackGraph.IR
   other-modules:
       Paths_hs_stack_graphs
   hs-source-dirs:

@@ -1,4 +1,5 @@
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE DuplicateRecordFields #-}
@@ -145,7 +146,11 @@ data Node = Node
   , isClickable :: Bool
   }
 
+{#pointer *node as NodePtr -> Node #}
+
 type NodeHandle = {#type node_handle#}
+
+{#pointer *node_handle as NodeHandlePtr -> NodeHandle #}
 
 rootNodeHandle :: NodeHandle
 rootNodeHandle = {#const SG_ROOT_NODE_HANDLE#}
@@ -161,17 +166,40 @@ data Edge = Edge
   , precedence :: Int32
   }
 
--- TODO storable
-
 type ScopeStackCellHandle = {#type scope_stack_cell_handle#}
 
 newtype ScopeStack = ScopeStack { cells :: ScopeStackCellHandle }
+  deriving newtype Storable
 
 data ScopedSymbol = ScopedSymbol { symbol :: SymbolHandle, scopes :: ScopeStack }
 
+instance Storable ScopedSymbol where
+  sizeOf _ = {#sizeof scoped_symbol#}
+  alignment _ = {#alignof scoped_symbol#}
+  peek p = do
+    bod <- {#get scoped_symbol->symbol #} p
+    len <- peekByteOff (castPtr p) {#offsetof scoped_symbol->scopes#}
+    pure (ScopedSymbol bod len)
+  poke p (ScopedSymbol bod len) = do
+    poke (castPtr p) bod
+    pokeByteOff (castPtr p) {#offsetof scoped_symbol->scopes#} len
+
 type SymbolStackCellHandle = {#type symbol_stack_cell_handle#}
 
+{#pointer *symbol_stack_cell as SymbolStackCellHandlePtr -> SymbolStackCellHandle #}
+
 data SymbolStackCell = SymbolStackCell { head :: ScopedSymbol, tail :: SymbolStackCellHandle }
+
+instance Storable SymbolStackCell where
+  sizeOf _ = {#sizeof symbol_stack_cell#}
+  alignment _ = {#alignof symbol_stack_cell#}
+  peek p = do
+    bod <- peek (castPtr p)
+    len <- {#get symbol_stack_cell->tail #} p
+    pure (SymbolStackCell bod len)
+  poke p (SymbolStackCell bod len) = do
+    poke (castPtr p) bod
+    {#set symbol_stack_cell.tail #} p len
 
 {#pointer *symbol_stack_cell as SymbolStackCellPtr -> SymbolStackCell #}
 
@@ -188,7 +216,20 @@ instance Storable SymbolStackCells where
     {#set symbol_stack_cells.cells #} p (castPtr bod)
     {#set symbol_stack_cells.count #} p (fromIntegral len)
 
-data SymbolStack = SymbolStack { cells :: Ptr SymbolStackCellHandle, length :: CSize }
+data SymbolStack = SymbolStack { cells :: SymbolStackCellHandlePtr, length :: CSize }
+
+{#pointer *symbol_stack as SymbolStackPtr -> SymbolStack #}
+
+instance Storable SymbolStack where
+  sizeOf _ = {#sizeof symbol_stack#}
+  alignment _ = {#alignof symbol_stack#}
+  peek p = do
+    bod <- peek (castPtr p)
+    len <- {#get struct symbol_stack->length #} p
+    pure (SymbolStack bod (fromIntegral len))
+  poke p (SymbolStack bod len) = do
+    poke (castPtr p) bod
+    {#set struct symbol_stack.length #} p (fromIntegral len)
 
 data ScopeStackCell = ScopeStackCell { head :: NodeHandle, tail :: ScopeStackCellHandle }
 
@@ -371,6 +412,8 @@ data PartialPath = PartialPath
   , edges :: PartialPathEdgeList
   }
 
+{#pointer *partial_path as PartialPathPtr -> PartialPath #}
+
 data PartialPaths = PartialPaths { cells :: Ptr PartialPath, count :: CSize }
 
 type PartialPathHandle = {#type partial_path_handle#}
@@ -417,8 +460,8 @@ castPeek p = do
 {#fun unsafe stack_graph_get_or_create_nodes as ^
   { id `StackGraphPtr',
     fromIntegral `CSize',
-    castPtr `Ptr Node',
-    castPtr `Ptr NodeHandle'} -> `()' #}
+    `NodePtr',
+    `NodeHandlePtr'} -> `()' #}
 
 {#fun unsafe stack_graph_add_edges as ^
   { id `StackGraphPtr', fromIntegral `CSize', castPtr `Ptr Node'} -> `()' #}
@@ -430,7 +473,7 @@ castPeek p = do
     fromIntegral `CSize',
     castPtr `Ptr ScopedSymbol',
     castPtr `Ptr CSize',
-    castPtr `Ptr SymbolStack'} -> `()' #}
+    `SymbolStackPtr'} -> `()' #}
 
 {#fun unsafe path_arena_scope_stack_cells as ^ { castPtr `PathArenaPtr'} -> `ScopeStackCells' castPeek* #}
 
@@ -486,6 +529,30 @@ castPeek p = do
 {#fun unsafe partial_path_arena_add_partial_path_edge_lists as ^
   { id `PartialPathArenaPtr',
     fromIntegral `CSize',
-    castPtr `Ptr PartialScopedSymbol',
+    castPtr `Ptr PartialPathEdge',
     castPtr `Ptr CSize',
-    castPtr `Ptr PartialSymbolStack'} -> `()' #}
+    castPtr `Ptr PartialPathEdgeList'} -> `()' #}
+
+{#fun unsafe partial_path_list_new as ^ {} -> `PartialPathListPtr' #}
+{#fun unsafe partial_path_list_free as ^ {`PartialPathListPtr'} -> `()' #}
+
+{#fun partial_path_list_count as ^
+  { `PartialPathListPtr' } -> `CSize' fromIntegral #}
+
+{#fun partial_path_list_paths as ^ { `PartialPathListPtr' } -> `PartialPathPtr' #}
+
+{#fun unsafe partial_path_arena_find_partial_paths_in_file as ^
+  { `StackGraphPtr',
+    `PartialPathArenaPtr',
+    fromIntegral `FileHandle',
+    `PartialPathListPtr' } -> `()' #}
+
+{#fun partial_path_database_add_partial_paths as ^
+  { `StackGraphPtr',
+    `PartialPathArenaPtr',
+    `PartialPathDatabasePtr',
+    fromIntegral `CSize',
+    `PartialPathPtr',
+    castPtr `Ptr PartialPathHandle' } -> `()' #}
+
+-- TODO stitcher
