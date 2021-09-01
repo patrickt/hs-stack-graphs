@@ -27,6 +27,9 @@ instance HasHandle PartialSymbolStackCell
 instance HasHandle PartialPathEdgeListCell
 instance HasHandle PartialPath
 
+deref :: SymbolStackCellPtr -> Int -> IO SymbolStackCell
+deref p x = peekByteOff p (x * sizeOf (undefined :: SymbolStackCell))
+
 convCells :: SymbolStackCells -> IO (Vector SymbolStackCell)
 convCells (SymbolStackCells items len) = do
-  V.generateM (fromIntegral len) (\idx -> undefined)
+  V.generateM (fromIntegral len) (deref items)
