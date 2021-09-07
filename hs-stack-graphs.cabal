@@ -28,6 +28,7 @@ library
       Lib
       StackGraph.Foreign
       StackGraph.IR
+      StackGraph.Raw
   other-modules:
       Paths_hs_stack_graphs
   hs-source-dirs:

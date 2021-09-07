@@ -48,8 +48,8 @@ data PartialPathList
 {#pointer *partial_path_database as PartialPathDatabasePtr -> PartialPathDatabase #}
 {#pointer *partial_path_list as PartialPathListPtr -> PartialPathList #}
 
-data PathArena
 data PathList
+data PathArena
 
 {#pointer *path_arena as PathArenaPtr -> PathArena #}
 {#pointer *path_list as PathListPtr -> PathList #}
