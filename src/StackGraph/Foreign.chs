@@ -670,12 +670,12 @@ castPeek p = do
 
 {#fun unsafe partial_path_arena_partial_symbol_stack_cells as ^ { castPtr `PartialPathArenaPtr'} -> `PartialSymbolStackCells' castPeek* #}
 
-{#fun unsafe partial_path_arena_add_partial_symbol_stacks as ^
-  { id `PartialPathArenaPtr',
-    fromIntegral `CSize',
-    castPtr `Ptr PartialScopedSymbol',
-    castPtr `Ptr CSize',
-    castPtr `Ptr PartialSymbolStack'} -> `()' #}
+-- {#fun unsafe partial_path_arena_add_partial_symbol_stacks as ^
+--   { id `PartialPathArenaPtr',
+--     fromIntegral `CSize',
+--     castPtr `Ptr PartialScopedSymbol',
+--     castPtr `Ptr CSize',
+--     castPtr `Ptr PartialSymbolStack'} -> `()' #}
 
 {#fun unsafe partial_path_arena_add_partial_scope_stacks as ^
   { id `PartialPathArenaPtr',
