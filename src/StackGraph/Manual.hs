@@ -1,4 +1,5 @@
 {-# LANGUAGE BlockArguments #-}
+{-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE CApiFFI #-}
 {-# LANGUAGE EmptyDataDecls #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
@@ -21,6 +22,14 @@ import GHC.Generics (Generic)
 import Foreign.Storable.Generic
 import Data.Foldable (fold)
 
+-- * Handles
+
+newtype Handle t = Handle {unHandle :: Word32}
+  deriving stock (Eq, Show)
+  deriving newtype (Storable)
+
+-- * Stack graphs
+
 newtype {-# CTYPE "stack-graphs.h" "struct sg_stack_graph" #-} StackGraph =
   StackGraph {unStackGraph :: ForeignPtr StackGraph}
 
@@ -39,9 +48,17 @@ stackGraphNew = do
   fp <- newForeignPtr sg_stack_graph_free sg
   pure (StackGraph fp)
 
-newtype Handle t = Handle {unHandle :: Word32}
-  deriving stock (Eq, Show)
-  deriving newtype (Storable)
+-- * Symbols
+
+data {-# CTYPE "stack-graphs.h" "struct sg_symbol" #-} Symbol = Symbol { symbol :: CString, symbol_len :: CSize }
+  deriving stock (Eq, Show, Generic)
+  deriving anyclass GStorable
+
+data {-# CTYPE "stack-graphs.h" "struct sg_symbols" #-} Symbols = Symbols { symbols :: Ptr Symbol, count :: CSize }
+  deriving stock (Eq, Show, Generic)
+  deriving anyclass GStorable
+
+-- * Adding symbols to stack graphs
 
 foreign import capi unsafe "stack-graphs.h sg_stack_graph_add_symbols"
   sg_stack_graph_add_symbols :: Ptr StackGraph -> CSize -> CString -> Ptr CSize -> Ptr (Handle Symbol) -> IO ()
@@ -59,14 +76,6 @@ stackGraphAddSymbols sg syms =
     lengths :: [CSize] = fmap (fromIntegral . B.length) syms
     count :: Int = length syms
 
-data {-# CTYPE "stack-graphs.h" "struct sg_symbol" #-} Symbol = Symbol { symbol :: CString, symbol_len :: CSize }
-  deriving stock (Eq, Show, Generic)
-  deriving anyclass GStorable
-
-data {-# CTYPE "stack-graphs.h" "struct sg_symbols" #-} Symbols = Symbols { symbols :: Ptr Symbol, count :: CSize }
-  deriving stock (Eq, Show, Generic)
-  deriving anyclass GStorable
-
 foreign import capi unsafe "hs_stack_graphs.h sg_stack_graph_symbols_ptr"
   sg_stack_graph_symbols_ptr :: Ptr StackGraph -> Ptr Symbols -> IO ()
 
@@ -80,12 +89,24 @@ stackGraphSymbols sg =
       for (drop 1 allsyms) \sym ->
         B.packCStringLen (symbol sym, fromIntegral (symbol_len sym))
 
+-- * Files
+
 data {-# CTYPE "stack-graphs.h" "struct sg_file" #-} File = File { name :: CString, name_len :: CSize }
   deriving stock (Generic)
   deriving anyclass GStorable
 
+data {-# CTYPE "stack-graphs.h" "struct sg_files" #-} Files = Files { files :: Ptr File, fileCount :: CSize }
+  deriving stock (Eq, Show, Generic)
+  deriving anyclass GStorable
+
 foreign import capi unsafe "stack-graphs.h sg_stack_graph_add_files"
   sg_stack_graph_add_files :: Ptr StackGraph -> CSize -> CString -> Ptr CSize -> Ptr (Handle File) -> IO ()
+
+
+foreign import capi unsafe "hs_stack_graphs.h sg_stack_graph_files_ptr"
+  sg_stack_graph_files_ptr :: Ptr StackGraph -> Ptr Files -> IO ()
+
+-- * Adding files to stack graphs
 
 stackGraphAddFiles :: StackGraph -> [ByteString] -> IO [Handle File]
 stackGraphAddFiles sg syms =
@@ -99,3 +120,13 @@ stackGraphAddFiles sg syms =
     concatted :: ByteString = fold syms
     lengths :: [CSize] = fmap (fromIntegral . B.length) syms
     count :: Int = length syms
+
+stackGraphFiles :: StackGraph -> IO [ByteString]
+stackGraphFiles sg =
+  withStackGraph sg \sgptr -> do
+    alloca @Files \symsptr -> do
+      sg_stack_graph_files_ptr sgptr symsptr
+      temp <- peek symsptr
+      allsyms <- peekArray (fromIntegral (fileCount temp)) (files temp)
+      for (drop 1 allsyms) \sym ->
+        B.packCStringLen (name sym, fromIntegral (name_len sym))

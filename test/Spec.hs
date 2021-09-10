@@ -18,10 +18,10 @@ import Control.Monad
 import Data.String (fromString)
 import Hedgehog.Main (defaultMain)
 
-prop_symbols_deduplicate :: Property
-prop_symbols_deduplicate = property do
+prop_symbols_comparable :: Property
+prop_symbols_comparable = property do
   sg <- liftIO Man.stackGraphNew
-  n1 <- forAll (Gen.utf8 (Range.linear 1 3) Gen.ascii)
+  n1 <- forAll (Gen.utf8 (Range.linear 1 3) Gen.lower)
   handles <- liftIO $ Man.stackGraphAddSymbols sg [n1, n1, n1 <> n1]
   annotateShow handles
 
@@ -31,15 +31,21 @@ prop_symbols_deduplicate = property do
   b1 /== a1
   b1 /== a2
 
-prop_symbols_correspond_one :: Property
-prop_symbols_correspond_one = withTests 1 $ property do
+prop_files_comparable :: Property
+prop_files_comparable = property do
   sg <- liftIO Man.stackGraphNew
-  xs1 <- liftIO $ Man.stackGraphSymbols sg
-  xs1 === []
+  n1 <- forAll (Gen.utf8 (Range.linear 1 3) Gen.ascii)
+  handles <- liftIO $ Man.stackGraphAddFiles sg [n1, n1, n1 <> n1]
+  annotateShow handles
 
+  let [a1, a2, b1] = handles
 
-prop_syms_roundtrip :: Property
-prop_syms_roundtrip = withTests 10000 $ property do
+  a1 === a2
+  b1 /== a1
+  b1 /== a2
+
+prop_syms_deduplicate :: Property
+prop_syms_deduplicate = withTests 100 $ property do
   sg <- liftIO Man.stackGraphNew
   sym <- forAll $ Gen.list (Range.linear 1 100) (Gen.utf8 (Range.linear 1 10) Gen.ascii)
 
@@ -47,6 +53,38 @@ prop_syms_roundtrip = withTests 10000 $ property do
   xs <- liftIO $ Man.stackGraphSymbols sg
 
   length (nub sym) === length xs
+
+prop_files_deduplicate :: Property
+prop_files_deduplicate = withTests 100 $ property do
+  sg <- liftIO Man.stackGraphNew
+  sym <- forAll $ Gen.list (Range.linear 1 100) (Gen.utf8 (Range.linear 1 10) Gen.ascii)
+
+  hdls <- liftIO $ Man.stackGraphAddFiles sg sym
+  xs <- liftIO $ Man.stackGraphFiles sg
+
+  length (nub sym) === length xs
+
+prop_syms_roundtrip :: Property
+prop_syms_roundtrip = withTests 100 $ property do
+  sg <- liftIO Man.stackGraphNew
+  sym <- forAll $ Gen.utf8 (Range.linear 1 10) Gen.ascii
+  let test = [sym, sym <> sym]
+
+  hdls <- liftIO $ Man.stackGraphAddSymbols sg test
+  done <- liftIO $ Man.stackGraphSymbols sg
+
+  test === done
+
+prop_files_roundtrip :: Property
+prop_files_roundtrip = withTests 100 $ property do
+  sg <- liftIO Man.stackGraphNew
+  sym <- forAll $ Gen.utf8 (Range.linear 1 10) Gen.ascii
+  let test = [sym, sym <> sym]
+
+  hdls <- liftIO $ Man.stackGraphAddFiles sg test
+  done <- liftIO $ Man.stackGraphFiles sg
+
+  test === done
 
 main :: IO ()
 main = do
