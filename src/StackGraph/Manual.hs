@@ -1,6 +1,7 @@
 {-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE CApiFFI #-}
+{-# LANGUAGE Strict #-}
 {-# LANGUAGE EmptyDataDecls #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE DerivingStrategies #-}
@@ -54,9 +55,16 @@ data {-# CTYPE "stack-graphs.h" "struct sg_symbol" #-} Symbol = Symbol { symbol 
   deriving stock (Eq, Show, Generic)
   deriving anyclass GStorable
 
-data {-# CTYPE "stack-graphs.h" "struct sg_symbols" #-} Symbols = Symbols { symbols :: Ptr Symbol, count :: CSize }
+data List a = List { buffer :: Ptr a, count :: CSize }
   deriving stock (Eq, Show, Generic)
   deriving anyclass GStorable
+
+peekList :: Storable a => Ptr (List a) -> IO [a]
+peekList p = do
+  List buf siz <- peek p
+  peekArray (fromIntegral siz) buf
+
+type Symbols = List Symbol
 
 -- * Adding symbols to stack graphs
 
@@ -84,8 +92,7 @@ stackGraphSymbols sg =
   withStackGraph sg \sgptr -> do
     alloca @Symbols \symsptr -> do
       sg_stack_graph_symbols_ptr sgptr symsptr
-      temp <- peek symsptr
-      allsyms <- peekArray (fromIntegral (count temp)) (symbols temp)
+      allsyms <- peekList symsptr
       for (drop 1 allsyms) \sym ->
         B.packCStringLen (symbol sym, fromIntegral (symbol_len sym))
 
@@ -95,13 +102,10 @@ data {-# CTYPE "stack-graphs.h" "struct sg_file" #-} File = File { name :: CStri
   deriving stock (Generic)
   deriving anyclass GStorable
 
-data {-# CTYPE "stack-graphs.h" "struct sg_files" #-} Files = Files { files :: Ptr File, fileCount :: CSize }
-  deriving stock (Eq, Show, Generic)
-  deriving anyclass GStorable
+type Files = List File
 
 foreign import capi unsafe "stack-graphs.h sg_stack_graph_add_files"
   sg_stack_graph_add_files :: Ptr StackGraph -> CSize -> CString -> Ptr CSize -> Ptr (Handle File) -> IO ()
-
 
 foreign import capi unsafe "hs_stack_graphs.h sg_stack_graph_files_ptr"
   sg_stack_graph_files_ptr :: Ptr StackGraph -> Ptr Files -> IO ()
@@ -126,7 +130,34 @@ stackGraphFiles sg =
   withStackGraph sg \sgptr -> do
     alloca @Files \symsptr -> do
       sg_stack_graph_files_ptr sgptr symsptr
-      temp <- peek symsptr
-      allsyms <- peekArray (fromIntegral (fileCount temp)) (files temp)
+      allsyms <- peekList symsptr
       for (drop 1 allsyms) \sym ->
         B.packCStringLen (name sym, fromIntegral (name_len sym))
+
+-- * Nodes
+
+data NodeKind = DropScopes
+              | ExportedScope
+              | InternalScope
+              | JumpTo
+              | PopScopedSymbol
+              | PopSymbol
+              | PushScopedSymbol
+              | PushSymbol
+              | Root
+  deriving stock (Enum, Eq, Show)
+
+data NodeId = NodeId
+  { file :: Handle File
+  , localId :: Handle ()
+  }
+  deriving stock (Eq, Show, Generic)
+  deriving anyclass (GStorable)
+
+data Node = Node
+  { nodeKind :: NodeKind
+  , nodeId :: NodeId
+  , nodeSymbol :: Handle Symbol
+  , nodeScope :: NodeId
+  , nodeIsClickable :: Bool
+  }
