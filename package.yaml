@@ -24,6 +24,7 @@ dependencies:
 - bytestring
 - vector >= 0.12 && <0.13
 - derive-storable
+- time
 
 ghc-options: "-optc=-Wno-nullability-completeness -optc=-Wno-expansion-to-defined"
 
