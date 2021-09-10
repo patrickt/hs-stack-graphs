@@ -30,6 +30,7 @@ library
       StackGraph.IR
       StackGraph.Manual
       StackGraph.Raw
+      StackGraph.Safe
   other-modules:
       Paths_hs_stack_graphs
   hs-source-dirs:

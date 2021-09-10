@@ -40,7 +40,7 @@ prop_symbols_correspond_one = withTests 1 $ property do
 
 
 prop_syms_roundtrip :: Property
-prop_syms_roundtrip = withTests 10000 $ property do
+prop_syms_roundtrip = withTests 1000 $ property do
   sg <- liftIO Man.stackGraphNew
   sym <- forAll $ Gen.list (Range.linear 1 100) (Gen.utf8 (Range.linear 1 10) Gen.ascii)
 
