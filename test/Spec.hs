@@ -12,20 +12,17 @@ import StackGraph.IR qualified as IR
 import StackGraph.Raw qualified as Raw
 import StackGraph.Manual as Man
 import Data.ByteString (ByteString)
+import Data.List (nub)
+import Hedgehog.Range qualified as Range
 import Control.Monad.IO.Class
 import Control.Monad
 import Data.String (fromString)
 import Hedgehog.Main (defaultMain)
 
-genSymbol :: Gen ByteString
-genSymbol = do
-  s <- Gen.lower
-  pure (fromString [s, s, s])
-
 prop_symbols_deduplicate :: Property
 prop_symbols_deduplicate = property do
   sg <- liftIO Man.stackGraphNew
-  n1 <- forAll genSymbol
+  n1 <- forAll (Gen.utf8 (Range.linear 1 3) Gen.ascii)
   handles <- liftIO $ Man.stackGraphAddSymbols sg [n1, n1, n1 <> n1]
   annotateShow handles
 
@@ -43,17 +40,14 @@ prop_symbols_correspond_one = withTests 1 $ property do
 
 
 prop_syms_roundtrip :: Property
-prop_syms_roundtrip = property do
+prop_syms_roundtrip = withTests 10000 $ property do
   sg <- liftIO Man.stackGraphNew
-  sym <- forAll genSymbol
+  sym <- forAll $ Gen.list (Range.linear 1 100) (Gen.utf8 (Range.linear 1 10) Gen.ascii)
 
-  hdls <- liftIO . Man.stackGraphAddSymbols sg $ [sym]
+  hdls <- liftIO $ Man.stackGraphAddSymbols sg sym
   xs <- liftIO $ Man.stackGraphSymbols sg
 
-  let [x1] = xs
-  annotateShow xs
-  annotateShow hdls
-  x1 === sym
+  length (nub sym) === length xs
 
 main :: IO ()
 main = defaultMain [checkParallel $$(discover)]
