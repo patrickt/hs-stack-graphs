@@ -18,6 +18,7 @@ import Data.ByteString (ByteString)
 import Data.ByteString qualified as B
 import Foreign
 import Foreign.C.Types
+import Foreign.C.String (CString)
 import Data.Coerce
 import Control.Exception (assert, finally)
 import Data.List (genericLength)
@@ -76,11 +77,16 @@ stackGraphAddSymbols sg syms = withStackGraph sg $ \sgp -> do
 
 {#fun stack_graph_symbols_new as ^ {`StackGraph'} -> `Symbols' #}
 {#fun symbols_count as ^ {`Symbols'} -> `CSize' #}
+{#fun symbols_copy as ^ {`Symbols', id `Ptr CString'} -> `()' #}
 
 stackGraphSymbolsRaw :: StackGraph -> IO [Symbol]
 stackGraphSymbolsRaw sg = do
   x <- stackGraphSymbolsNew sg
+  slen <- symbolsCount x
   withSymbols x $ \xp -> do
-    len :: CSize <- fromIntegral <$> {#call symbols_count #} xp
-    ptr :: Ptr Symbol <- {#call symbols_contents #} xp
-    drop 1 <$> peekArray (fromIntegral len - 1) ptr
+    let len :: CSize = fromIntegral slen
+    allocaArray @CString (fromIntegral slen) $ \allsyms -> do
+      symbolsCopy x allsyms
+      strings <- peekArray (fromIntegral slen) allsyms
+      item <- traverse (fmap Symbol . B.packCString) strings
+      pure (drop 1 item)
