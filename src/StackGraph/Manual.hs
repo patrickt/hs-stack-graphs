@@ -19,10 +19,14 @@ import Foreign.C
 import Data.ByteString (ByteString)
 import Data.ByteString qualified as B
 import Foreign.Storable
+import GHC.ForeignPtr (mallocPlainForeignPtrBytes)
 import GHC.Generics (Generic)
 import Foreign.Storable.Generic
 import Data.Foldable (fold)
 import StackGraph.Handle
+import Data.Vector qualified as V
+import Data.Vector.Storable qualified as VS
+import Data.Vector.Generic qualified as Vector
 
 -- * Stack graphs
 
@@ -54,10 +58,22 @@ data List a = List { buffer :: Ptr a, count :: CSize }
   deriving stock (Eq, Show, Generic)
   deriving anyclass GStorable
 
-peekList :: Storable a => Ptr (List a) -> IO [a]
+peekList :: forall a . Storable a => Ptr (List a) -> IO (VS.Vector a)
 peekList p = do
   List buf siz <- peek p
-  peekArray (fromIntegral siz) buf
+  let n = fromIntegral siz * sizeOf @a undefined
+  fp <- mallocPlainForeignPtrBytes n
+  withForeignPtr fp $ \p -> copyBytes p buf n
+  return $ VS.unsafeFromForeignPtr0 fp (fromIntegral siz)
+
+peekVector :: forall a. (Storable a) => Int -> Ptr a -> IO (VS.Vector a)
+peekVector size ptr
+  | size <= 0 = return VS.empty
+  | otherwise = do
+    let n = size * sizeOf (undefined :: a)
+    fp <- mallocPlainForeignPtrBytes n
+    withForeignPtr fp $ \p -> copyBytes p ptr n
+    return $ VS.unsafeFromForeignPtr0 fp size
 
 type Symbols = List Symbol
 
@@ -66,15 +82,14 @@ type Symbols = List Symbol
 foreign import capi unsafe "stack-graphs.h sg_stack_graph_add_symbols"
   sg_stack_graph_add_symbols :: Ptr StackGraph -> CSize -> CString -> Ptr CSize -> Ptr (Handle Symbol) -> IO ()
 
-stackGraphAddSymbols :: StackGraph -> [ByteString] -> IO [Handle Symbol]
+stackGraphAddSymbols :: StackGraph -> [ByteString] -> IO (VS.Vector (Handle Symbol))
 stackGraphAddSymbols sg syms =
   withStackGraph sg \sgptr ->
     B.useAsCString concatted \symptr ->
-      withArray @CSize lengths \lenptr ->
+      withArray @CSize lengths \lenptr -> \
         allocaArray @(Handle Symbol) count \hdlptr -> do
           sg_stack_graph_add_symbols sgptr (fromIntegral count) symptr lenptr hdlptr
-          -- TODO FIXME: invalid nodes can be null
-          peekArray count hdlptr
+          peekVector count hdlptr
   where
     concatted :: ByteString = fold syms
     lengths :: [CSize] = fmap (fromIntegral . B.length) syms
@@ -83,13 +98,13 @@ stackGraphAddSymbols sg syms =
 foreign import capi unsafe "hs_stack_graphs.h sg_stack_graph_symbols_ptr"
   sg_stack_graph_symbols_ptr :: Ptr StackGraph -> Ptr Symbols -> IO ()
 
-stackGraphSymbols :: StackGraph -> IO [ByteString]
+stackGraphSymbols :: StackGraph -> IO (V.Vector ByteString)
 stackGraphSymbols sg =
   withStackGraph sg \sgptr -> do
     alloca @Symbols \symsptr -> do
       sg_stack_graph_symbols_ptr sgptr symsptr
       allsyms <- peekList symsptr
-      for (drop 1 allsyms) \sym ->
+      for (Vector.convert (Vector.drop 1 allsyms)) \sym ->
         B.packCStringLen (symbol sym, fromIntegral (symbol_len sym))
 
 -- * Files
@@ -108,26 +123,26 @@ foreign import capi unsafe "hs_stack_graphs.h sg_stack_graph_files_ptr"
 
 -- * Adding files to stack graphs
 
-stackGraphAddFiles :: StackGraph -> [ByteString] -> IO [Handle File]
-stackGraphAddFiles sg syms =
+stackGraphAddFiles :: StackGraph -> [ByteString] -> IO (VS.Vector (Handle File))
+stackGraphAddFiles sg syms = do
   withStackGraph sg \sgptr ->
     B.useAsCString concatted \symptr ->
       withArray @CSize lengths \lenptr ->
         allocaArray @(Handle File) count \hdlptr -> do
           sg_stack_graph_add_files sgptr (fromIntegral count) symptr lenptr hdlptr
-          peekArray count hdlptr
+          peekVector count hdlptr
   where
     concatted :: ByteString = fold syms
     lengths :: [CSize] = fmap (fromIntegral . B.length) syms
     count :: Int = length syms
 
-stackGraphFiles :: StackGraph -> IO [ByteString]
+stackGraphFiles :: StackGraph -> IO (V.Vector ByteString)
 stackGraphFiles sg =
   withStackGraph sg \sgptr -> do
     alloca @Files \symsptr -> do
       sg_stack_graph_files_ptr sgptr symsptr
       allsyms <- peekList symsptr
-      for (drop 1 allsyms) \sym ->
+      for (Vector.convert (Vector.drop 1 allsyms)) \sym ->
         B.packCStringLen (name sym, fromIntegral (name_len sym))
 
 -- * Nodes
@@ -168,7 +183,7 @@ stackGraphGetOrCreateNodes sg nodes =
   where
     count :: Int = length nodes
 
-stackGraphNodes :: StackGraph -> IO [Node]
+stackGraphNodes :: StackGraph -> IO (VS.Vector Node)
 stackGraphNodes sg =
   withStackGraph sg \sgptr -> do
     alloca @Nodes \nodesptr -> do

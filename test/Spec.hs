@@ -17,6 +17,7 @@ import Hedgehog.Range qualified as Range
 import Control.Monad.IO.Class
 import Control.Monad
 import Data.String (fromString)
+import Data.Vector.Generic qualified as Vector
 import Hedgehog.Main (defaultMain)
 
 prop_symbols_comparable :: Property
@@ -50,7 +51,7 @@ prop_syms_deduplicate = withTests 100 $ property do
   sg <- liftIO Man.stackGraphNew
   sym <- forAll $ Gen.list (Range.linear 1 10000) (Gen.utf8 (Range.linear 1 10) Gen.ascii)
 
-  hdls <- liftIO $ Man.stackGraphAddSymbols sg sym
+  liftIO $ Man.stackGraphAddSymbols sg sym
   xs <- liftIO $ Man.stackGraphSymbols sg
 
   length (nub sym) === length xs
@@ -74,7 +75,7 @@ prop_syms_roundtrip = withTests 100 $ property do
   hdls <- liftIO $ Man.stackGraphAddSymbols sg test
   done <- liftIO $ Man.stackGraphSymbols sg
 
-  test === done
+  test === Vector.toList done
 
 prop_files_roundtrip :: Property
 prop_files_roundtrip = withTests 100 $ property do
@@ -85,7 +86,7 @@ prop_files_roundtrip = withTests 100 $ property do
   hdls <- liftIO $ Man.stackGraphAddFiles sg test
   done <- liftIO $ Man.stackGraphFiles sg
 
-  test === done
+  test === Vector.toList done
 
 main :: IO ()
 main = do

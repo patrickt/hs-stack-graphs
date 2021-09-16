@@ -7,6 +7,8 @@ import Data.Word
 import Data.ByteString (ByteString)
 import Data.Coerce
 import StackGraph.Handle
+import Data.Vector.Storable qualified as VS
+import Data.Vector qualified as V
 
 newtype StackGraph s = StackGraph Man.StackGraph
 
@@ -17,8 +19,8 @@ withStackGraph fn = do
   sg <- Man.stackGraphNew
   fn (StackGraph sg)
 
-addSymbols :: StackGraph s -> [ByteString] -> IO [Handle (Symbol s)]
+addSymbols :: StackGraph s -> [ByteString] -> IO (VS.Vector (Handle (Symbol s)))
 addSymbols = coerce Man.stackGraphAddSymbols
 
-getSymbols :: StackGraph s -> IO [Symbol s]
+getSymbols :: StackGraph s -> IO (V.Vector (Symbol s))
 getSymbols = coerce Man.stackGraphSymbols
