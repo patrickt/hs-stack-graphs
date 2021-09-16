@@ -20,3 +20,10 @@ inline void sg_partial_path_arena_partial_path_edge_list_cells_ptr(struct sg_par
   struct sg_partial_path_edge_list_cells items = sg_partial_path_arena_partial_path_edge_list_cells(arena);
   memcpy(syms, &items, sizeof items);
 }
+
+inline void sg_stack_graph_nodes_ptr(struct sg_stack_graph *graph, struct sg_nodes *nodes)
+{
+  struct sg_nodes items = sg_stack_graph_nodes(graph);
+  nodes->nodes = items.nodes;
+  nodes->count = items.count;
+}

@@ -22,12 +22,7 @@ import Foreign.Storable
 import GHC.Generics (Generic)
 import Foreign.Storable.Generic
 import Data.Foldable (fold)
-
--- * Handles
-
-newtype Handle t = Handle {unHandle :: Word32}
-  deriving stock (Eq, Show)
-  deriving newtype (Storable)
+import StackGraph.Handle
 
 -- * Stack graphs
 
@@ -78,6 +73,7 @@ stackGraphAddSymbols sg syms =
       withArray @CSize lengths \lenptr ->
         allocaArray @(Handle Symbol) count \hdlptr -> do
           sg_stack_graph_add_symbols sgptr (fromIntegral count) symptr lenptr hdlptr
+          -- TODO FIXME: invalid nodes can be null
           peekArray count hdlptr
   where
     concatted :: ByteString = fold syms
@@ -136,17 +132,6 @@ stackGraphFiles sg =
 
 -- * Nodes
 
-data NodeKind = DropScopes
-              | ExportedScope
-              | InternalScope
-              | JumpTo
-              | PopScopedSymbol
-              | PopSymbol
-              | PushScopedSymbol
-              | PushSymbol
-              | Root
-  deriving stock (Enum, Eq, Show)
-
 data NodeId = NodeId
   { file :: Handle File
   , localId :: Handle ()
@@ -155,9 +140,37 @@ data NodeId = NodeId
   deriving anyclass (GStorable)
 
 data Node = Node
-  { nodeKind :: NodeKind
+  { nodeKind :: CInt
   , nodeId :: NodeId
   , nodeSymbol :: Handle Symbol
   , nodeScope :: NodeId
   , nodeIsClickable :: Bool
   }
+  deriving stock (Eq, Show, Generic)
+  deriving anyclass (GStorable)
+
+
+type Nodes = List Node
+
+foreign import capi unsafe "stack-graphs.h sg_stack_graph_get_or_create_nodes"
+  sg_stack_graph_get_or_create_nodes :: Ptr StackGraph -> CSize -> Ptr Node -> Ptr (Handle Node) -> IO ()
+
+foreign import capi unsafe "hs_stack_graphs.h sg_stack_graph_nodes_ptr"
+  sg_stack_graph_nodes_ptr :: Ptr StackGraph -> Ptr Nodes -> IO ()
+
+stackGraphGetOrCreateNodes :: StackGraph -> [Node] -> IO [Handle Node]
+stackGraphGetOrCreateNodes sg nodes =
+  withStackGraph sg \sgptr -> do
+    withArray nodes \nodesptr -> do
+      allocaArray @(Handle Node) (fromIntegral count) \hdlptr -> do
+        sg_stack_graph_get_or_create_nodes sgptr (fromIntegral count) nodesptr hdlptr
+        peekArray count hdlptr
+  where
+    count :: Int = length nodes
+
+stackGraphNodes :: StackGraph -> IO [Node]
+stackGraphNodes sg =
+  withStackGraph sg \sgptr -> do
+    alloca @Nodes \nodesptr -> do
+      sg_stack_graph_nodes_ptr sgptr nodesptr
+      peekList nodesptr

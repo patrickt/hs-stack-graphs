@@ -6,14 +6,13 @@ import StackGraph.Manual qualified as Man
 import Data.Word
 import Data.ByteString (ByteString)
 import Data.Coerce
+import StackGraph.Handle
 
 newtype StackGraph s = StackGraph Man.StackGraph
 
 newtype Symbol s = Symbol ByteString
 
-newtype Handle t = Handle Word32
-
-withStackGraph :: (forall a . StackGraph s -> IO a) -> IO a
+withStackGraph :: (forall s . StackGraph s -> IO a) -> IO a
 withStackGraph fn = do
   sg <- Man.stackGraphNew
   fn (StackGraph sg)

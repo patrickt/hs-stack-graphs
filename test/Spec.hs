@@ -8,6 +8,7 @@ module Main (main) where
 
 import Hedgehog
 import Data.Time.Clock
+import Gen qualified
 import Hedgehog.Gen qualified as Gen
 import StackGraph.Manual as Man
 import Data.ByteString (ByteString)
@@ -47,7 +48,7 @@ prop_files_comparable = property do
 prop_syms_deduplicate :: Property
 prop_syms_deduplicate = withTests 100 $ property do
   sg <- liftIO Man.stackGraphNew
-  sym <- forAll $ Gen.list (Range.linear 1 100) (Gen.utf8 (Range.linear 1 10) Gen.ascii)
+  sym <- forAll $ Gen.list (Range.linear 1 10000) (Gen.utf8 (Range.linear 1 10) Gen.ascii)
 
   hdls <- liftIO $ Man.stackGraphAddSymbols sg sym
   xs <- liftIO $ Man.stackGraphSymbols sg

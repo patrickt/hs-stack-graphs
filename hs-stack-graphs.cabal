@@ -25,10 +25,12 @@ source-repository head
 
 library
   exposed-modules:
-      Lib
+      StackGraph.Handle
       StackGraph.IR
       StackGraph.Manual
+      StackGraph.Node
       StackGraph.Safe
+      StackGraph.Symbol
   other-modules:
       Paths_hs_stack_graphs
   hs-source-dirs:
@@ -45,22 +47,8 @@ library
       base >=4.7 && <5
     , bytestring
     , derive-storable
-    , time
-    , vector ==0.12.*
-  default-language: Haskell2010
-
-executable hs-stack-graphs-exe
-  main-is: Main.hs
-  other-modules:
-      Paths_hs_stack_graphs
-  hs-source-dirs:
-      app
-  ghc-options: -optc=-Wno-nullability-completeness -optc=-Wno-expansion-to-defined -threaded -rtsopts -with-rtsopts=-N
-  build-depends:
-      base >=4.7 && <5
-    , bytestring
-    , derive-storable
-    , hs-stack-graphs
+    , generic-optics
+    , optics
     , time
     , vector ==0.12.*
   default-language: Haskell2010
@@ -69,6 +57,7 @@ test-suite hs-stack-graphs-test
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   other-modules:
+      Gen
       Paths_hs_stack_graphs
   hs-source-dirs:
       test
@@ -77,8 +66,10 @@ test-suite hs-stack-graphs-test
       base >=4.7 && <5
     , bytestring
     , derive-storable
+    , generic-optics
     , hedgehog
     , hs-stack-graphs
+    , optics
     , time
     , vector ==0.12.*
   default-language: Haskell2010
