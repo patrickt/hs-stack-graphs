@@ -25,6 +25,7 @@ source-repository head
 
 library
   exposed-modules:
+      StackGraph.C.Arena
       StackGraph.Handle
       StackGraph.IR
       StackGraph.Manual
@@ -65,11 +66,30 @@ test-suite hs-stack-graphs-test
   build-depends:
       base >=4.7 && <5
     , bytestring
-    , derive-storable
     , generic-optics
     , hedgehog
     , hs-stack-graphs
     , optics
+    , time
+    , vector ==0.12.*
+  default-language: Haskell2010
+
+benchmark hs-stack-graphs-bench
+  type: exitcode-stdio-1.0
+  main-is: Main.hs
+  other-modules:
+      Paths_hs_stack_graphs
+  hs-source-dirs:
+      bench
+  ghc-options: -optc=-Wno-nullability-completeness -optc=-Wno-expansion-to-defined
+  build-depends:
+      base >=4.7 && <5
+    , bytestring
+    , gauge
+    , generic-optics
+    , hs-stack-graphs
+    , optics
+    , random
     , time
     , vector ==0.12.*
   default-language: Haskell2010

@@ -23,7 +23,6 @@ dependencies:
 - base >= 4.7 && < 5
 - bytestring
 - vector >= 0.12 && <0.13
-- derive-storable
 - time
 - optics
 - generic-optics
@@ -36,6 +35,18 @@ library:
   c-sources: cbits/hs_stack_graphs.c
   include-dirs:         include
   cc-options: -Wno-nullability-completeness
+  dependencies:
+    - derive-storable
+
+
+benchmarks:
+  hs-stack-graphs-bench:
+    source-dirs: bench
+    main: Main.hs
+    dependencies:
+      - hs-stack-graphs
+      - gauge
+      - random
 
 tests:
   hs-stack-graphs-test:

@@ -75,7 +75,7 @@ prop_syms_roundtrip = withTests 100 $ property do
   hdls <- liftIO $ Man.stackGraphAddSymbols sg test
   done <- liftIO $ Man.stackGraphSymbols sg
 
-  test === Vector.toList done
+  test === done
 
 prop_files_roundtrip :: Property
 prop_files_roundtrip = withTests 100 $ property do

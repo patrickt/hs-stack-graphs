@@ -22,5 +22,5 @@ withStackGraph fn = do
 addSymbols :: StackGraph s -> [ByteString] -> IO (VS.Vector (Handle (Symbol s)))
 addSymbols = coerce Man.stackGraphAddSymbols
 
-getSymbols :: StackGraph s -> IO (V.Vector (Symbol s))
+getSymbols :: StackGraph s -> IO [Symbol s]
 getSymbols = coerce Man.stackGraphSymbols
