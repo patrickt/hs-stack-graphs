@@ -11,9 +11,20 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveAnyClass #-}
 
-module StackGraph.Manual where
+module StackGraph.C.StackGraph
+  ( StackGraph
+  , withStackGraph
+  , new
+  , addFiles
+  , addSymbols
+  , files
+  , getOrCreateNodes
+  , nodes
+  , symbols
+  )
+  where
 
-import Foreign
+import Foreign hiding (new)
 import Data.Traversable
 import Foreign.C
 import Data.ByteString (ByteString)
@@ -26,6 +37,11 @@ import Foreign.Storable.Generic
 import Data.Foldable (fold)
 import StackGraph.Handle
 import StackGraph.C.Arena (Arena)
+import StackGraph.C.Node (Node, Nodes)
+import StackGraph.C.Symbol (Symbol, Symbols)
+import StackGraph.C.Symbol qualified as Symbol
+import StackGraph.C.File (File, Files)
+import StackGraph.C.File qualified as File
 import StackGraph.C.Arena qualified as Arena
 import Data.Vector qualified as V
 import Data.Vector.Storable qualified as VS
@@ -46,8 +62,8 @@ foreign import capi unsafe "stack-graphs.h &sg_stack_graph_free"
 withStackGraph :: StackGraph -> (Ptr StackGraph -> IO b) -> IO b
 withStackGraph (StackGraph fptr) = withForeignPtr fptr
 
-stackGraphNew :: IO StackGraph
-stackGraphNew = do
+new :: IO StackGraph
+new = do
   sg <- sg_stack_graph_new
   fp <- newForeignPtr sg_stack_graph_free sg
   pure (StackGraph fp)
@@ -62,21 +78,13 @@ peekVector size ptr
     return $ VS.unsafeFromForeignPtr0 fp size
 
 
--- * Symbols
-
-data {-# CTYPE "stack-graphs.h" "struct sg_symbol" #-} Symbol = Symbol { symbol :: CString, symbol_len :: CSize }
-  deriving stock (Eq, Show, Generic)
-  deriving anyclass GStorable
-
-type Symbols = Arena Symbol
-
 -- * Adding symbols to stack graphs
 
 foreign import capi unsafe "stack-graphs.h sg_stack_graph_add_symbols"
   sg_stack_graph_add_symbols :: Ptr StackGraph -> CSize -> CString -> Ptr CSize -> Ptr (Handle Symbol) -> IO ()
 
-stackGraphAddSymbols :: StackGraph -> [ByteString] -> IO (VS.Vector (Handle Symbol))
-stackGraphAddSymbols sg syms =
+addSymbols :: StackGraph -> [ByteString] -> IO (VS.Vector (Handle Symbol))
+addSymbols sg syms =
   withStackGraph sg \sgptr ->
     B.useAsCString concatted \symptr ->
       withArray @CSize lengths \lenptr -> do
@@ -91,22 +99,16 @@ stackGraphAddSymbols sg syms =
 foreign import capi unsafe "hs_stack_graphs.h sg_stack_graph_symbols_ptr"
   sg_stack_graph_symbols_ptr :: Ptr StackGraph -> Ptr Symbols -> IO ()
 
-stackGraphSymbols :: StackGraph -> IO [ByteString]
-stackGraphSymbols sg =
+symbols :: StackGraph -> IO [ByteString]
+symbols sg =
   withStackGraph sg \sgptr -> do
     alloca @Symbols \symsptr -> do
       sg_stack_graph_symbols_ptr sgptr symsptr
       allsyms <- peek symsptr >>= Arena.contents
       for (drop 1 allsyms) \sym ->
-        B.packCStringLen (symbol sym, fromIntegral (symbol_len sym))
+        B.packCStringLen (Symbol.symbol sym, fromIntegral (Symbol.symbol_len sym))
 
 -- * Files
-
-data {-# CTYPE "stack-graphs.h" "struct sg_file" #-} File = File { name :: CString, name_len :: CSize }
-  deriving stock (Generic)
-  deriving anyclass GStorable
-
-type Files = Arena File
 
 foreign import capi unsafe "stack-graphs.h sg_stack_graph_add_files"
   sg_stack_graph_add_files :: Ptr StackGraph -> CSize -> CString -> Ptr CSize -> Ptr (Handle File) -> IO ()
@@ -116,8 +118,8 @@ foreign import capi unsafe "hs_stack_graphs.h sg_stack_graph_files_ptr"
 
 -- * Adding files to stack graphs
 
-stackGraphAddFiles :: StackGraph -> [ByteString] -> IO (VS.Vector (Handle File))
-stackGraphAddFiles sg syms = do
+addFiles :: StackGraph -> [ByteString] -> IO (VS.Vector (Handle File))
+addFiles sg syms = do
   withStackGraph sg \sgptr ->
     B.useAsCString concatted \symptr ->
       withArray @CSize lengths \lenptr ->
@@ -129,48 +131,16 @@ stackGraphAddFiles sg syms = do
     lengths :: [CSize] = fmap (fromIntegral . B.length) syms
     count :: Int = length syms
 
-stackGraphFiles :: StackGraph -> IO (V.Vector ByteString)
-stackGraphFiles sg =
+files :: StackGraph -> IO (V.Vector ByteString)
+files sg =
   withStackGraph sg \sgptr -> do
     alloca @Files \symsptr -> do
       sg_stack_graph_files_ptr sgptr symsptr
       allsyms <- Arena.contents' =<< peek symsptr
       for (Vector.convert (Vector.drop 1 allsyms)) \sym ->
-        B.packCStringLen (name sym, fromIntegral (name_len sym))
+        B.packCStringLen (File.name sym, fromIntegral (File.name_len sym))
 
 -- * Nodes
-
-data NodeId = NodeId
-  { file :: Handle File
-  , localId :: Handle NodeId
-  }
-  deriving stock (Eq, Show, Generic)
-  deriving anyclass (GStorable)
-
-foreign import capi "stack-graphs.h value SG_ROOT_NODE_ID" root_node_id :: Word32
-foreign import capi "stack-graphs.h value SG_JUMP_TO_NODE_ID" jump_to_node_id :: Word32
-
-defaultNodeId :: NodeId
-defaultNodeId = NodeId (Handle 0) (Handle 0)
-
-rootNodeId :: NodeId
-rootNodeId = NodeId (Handle 0) (Handle root_node_id)
-
-jumpToNodeId :: NodeId
-jumpToNodeId = NodeId (Handle 0) (Handle jump_to_node_id)
-
-data Node = Node
-  { nodeKind :: CInt
-  , nodeId :: NodeId
-  , nodeSymbol :: Handle Symbol
-  , nodeScope :: NodeId
-  , nodeIsClickable :: Bool
-  }
-  deriving stock (Eq, Show, Generic)
-  deriving anyclass (GStorable)
-
-
-type Nodes = Arena Node
 
 foreign import capi unsafe "stack-graphs.h sg_stack_graph_get_or_create_nodes"
   sg_stack_graph_get_or_create_nodes :: Ptr StackGraph -> CSize -> Ptr Node -> Ptr (Handle Node) -> IO ()
@@ -178,19 +148,19 @@ foreign import capi unsafe "stack-graphs.h sg_stack_graph_get_or_create_nodes"
 foreign import capi unsafe "hs_stack_graphs.h sg_stack_graph_nodes_ptr"
   sg_stack_graph_nodes_ptr :: Ptr StackGraph -> Ptr Nodes -> IO ()
 
-stackGraphGetOrCreateNodes :: StackGraph -> [Node] -> IO [Handle Node]
-stackGraphGetOrCreateNodes sg nodes =
+getOrCreateNodes :: StackGraph -> [Node] -> IO [Handle Node]
+getOrCreateNodes sg nodes =
   withStackGraph sg \sgptr -> do
     withArray nodes \nodesptr -> do
-      allocaArray @(Handle Node) (fromIntegral count) \hdlptr -> do
-        sg_stack_graph_get_or_create_nodes sgptr (fromIntegral count) nodesptr hdlptr
-        peekArray count hdlptr
+      allocaArray @(Handle Node) (fromIntegral count) $ do
+        sg_stack_graph_get_or_create_nodes sgptr (fromIntegral count) nodesptr
+        peekArray count
   where
     count :: Int = length nodes
 
-stackGraphNodes :: StackGraph -> IO (VS.Vector Node)
-stackGraphNodes sg =
+nodes :: StackGraph -> IO (Arena Node)
+nodes sg =
   withStackGraph sg \sgptr -> do
-    alloca @Nodes \nodesptr -> do
-      sg_stack_graph_nodes_ptr sgptr nodesptr
-      Arena.contents' =<< peek nodesptr
+    alloca @Nodes $ do
+      sg_stack_graph_nodes_ptr sgptr
+      peek

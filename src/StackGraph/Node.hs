@@ -20,7 +20,9 @@ import GHC.Generics (Generic)
 import Optics
 import StackGraph.Handle
 import StackGraph.Symbol
-import StackGraph.Manual qualified as C
+import StackGraph.C qualified as C
+import StackGraph.C.Node qualified as C
+import StackGraph.C.Symbol qualified as C
 import Data.Kind (Type)
 import Data.Coerce
 import Control.Exception
@@ -128,5 +130,5 @@ instance Bridge Node where
   toNative JumpTo =
     C.Node 3 C.jumpToNodeId nullHandle C.defaultNodeId False
   toNative (Node kind ident) = do
-    let sym :: Handle C.Symbol = kind ^? kindSymbol & fromMaybe nullHandle & coerce
+    let sym :: Handle C.Symbol = kind ^? kindSymbol ^. non nullHandle % coerced
     C.Node (kindTag kind) (coerce ident) sym (coerce ident) (isDefOrRef kind)

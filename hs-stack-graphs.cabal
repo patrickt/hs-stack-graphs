@@ -25,10 +25,15 @@ source-repository head
 
 library
   exposed-modules:
+      StackGraph.C
       StackGraph.C.Arena
+      StackGraph.C.Edge
+      StackGraph.C.File
+      StackGraph.C.Node
+      StackGraph.C.StackGraph
+      StackGraph.C.Symbol
       StackGraph.Handle
       StackGraph.IR
-      StackGraph.Manual
       StackGraph.Node
       StackGraph.Safe
       StackGraph.Symbol

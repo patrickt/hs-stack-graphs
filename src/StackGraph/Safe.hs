@@ -2,7 +2,7 @@
 {-# LANGUAGE RankNTypes #-}
 module StackGraph.Safe where
 
-import StackGraph.Manual qualified as Man
+import StackGraph.C qualified as Man
 import Data.Word
 import Data.ByteString (ByteString)
 import Data.Coerce
@@ -16,11 +16,11 @@ newtype Symbol s = Symbol ByteString
 
 withStackGraph :: (forall s . StackGraph s -> IO a) -> IO a
 withStackGraph fn = do
-  sg <- Man.stackGraphNew
+  sg <- Man.new
   fn (StackGraph sg)
 
 addSymbols :: StackGraph s -> [ByteString] -> IO (VS.Vector (Handle (Symbol s)))
-addSymbols = coerce Man.stackGraphAddSymbols
+addSymbols = coerce Man.addSymbols
 
 getSymbols :: StackGraph s -> IO [Symbol s]
-getSymbols = coerce Man.stackGraphSymbols
+getSymbols = coerce Man.symbols

@@ -8,7 +8,7 @@ import Data.ByteString.Char8 qualified as B
 import Data.Vector qualified as V
 import Data.Vector.Storable qualified as VS
 import Gauge
-import StackGraph.Manual
+import StackGraph.C qualified as SG
 import System.Random
 
 main :: IO ()
@@ -32,6 +32,6 @@ main = do
 
 symInsertFetch :: [ByteString] -> IO [ByteString]
 symInsertFetch bs = do
-  sg <- stackGraphNew
-  stackGraphAddSymbols sg bs
-  stackGraphSymbols sg
+  sg <- SG.new
+  SG.addSymbols sg bs
+  SG.symbols sg

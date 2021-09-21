@@ -24,6 +24,7 @@ import Foreign.C
 import Foreign.Storable.Generic (GStorable)
 import GHC.ForeignPtr
 import GHC.Generics (Generic)
+import GHC.Stack (HasCallStack)
 import StackGraph.Handle
 import Prelude hiding (length, lookup)
 
@@ -34,11 +35,14 @@ data Arena a = Arena {buffer :: Ptr a, count :: CSize}
 length :: Arena a -> Int
 length = fromIntegral . count
 
-lookup, unsafeLookup :: Storable a => Handle a -> Arena a -> IO a
+lookup :: (HasCallStack, Storable a) => Handle a -> Arena a -> IO a
 lookup (Handle h) (Arena buffer count) = do
   when (h > fromIntegral count) (throw (HandleIndexTooLarge h))
   peek (advancePtr buffer (fromIntegral h))
+
+unsafeLookup :: Storable a => Handle a -> Arena a -> IO a
 unsafeLookup (Handle h) (Arena buffer _) = peek (advancePtr buffer (fromIntegral h))
+{-# INLINE unsafeLookup #-}
 
 newtype ArenaException
   = HandleIndexTooLarge Word32
