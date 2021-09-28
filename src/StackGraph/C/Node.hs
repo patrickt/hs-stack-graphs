@@ -1,6 +1,7 @@
 {-# LANGUAGE CApiFFI #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE Strict #-}
 {-# LANGUAGE DeriveAnyClass #-}
 module StackGraph.C.Node
   ( NodeId (..)
@@ -18,7 +19,7 @@ import Foreign.Storable.Generic
 import Foreign.C
 import Data.Word
 import StackGraph.C.Symbol (Symbol)
-import StackGraph.C.Arena (Arena)
+import StackGraph.C.Slab (Slab)
 
 data NodeId = NodeId
   { file :: Handle File
@@ -49,4 +50,4 @@ data Node = Node
   deriving stock (Eq, Show, Generic)
   deriving anyclass (GStorable)
 
-type Nodes = Arena Node
+type Nodes = Slab Node

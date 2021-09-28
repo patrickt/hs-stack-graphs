@@ -21,6 +21,7 @@ module StackGraph.C.StackGraph
   , getOrCreateNodes
   , nodes
   , symbols
+  , addEdges
   )
   where
 
@@ -36,17 +37,19 @@ import Control.Exception
 import Foreign.Storable.Generic
 import Data.Foldable (fold)
 import StackGraph.Handle
-import StackGraph.C.Arena (Arena)
+import StackGraph.C.Slab (Slab)
 import StackGraph.C.Node (Node, Nodes)
 import StackGraph.C.Symbol (Symbol, Symbols)
 import StackGraph.C.Symbol qualified as Symbol
 import StackGraph.C.File (File, Files)
 import StackGraph.C.File qualified as File
-import StackGraph.C.Arena qualified as Arena
+import StackGraph.C.Slab qualified as Slab
 import Data.Vector qualified as V
 import Data.Vector.Storable qualified as VS
 import Data.Vector.Generic qualified as Vector
 import Control.Monad
+import StackGraph.C.Edge (Edge)
+import Data.List (genericLength)
 
 -- * Stack graphs
 
@@ -104,7 +107,7 @@ symbols sg =
   withStackGraph sg \sgptr -> do
     alloca @Symbols \symsptr -> do
       sg_stack_graph_symbols_ptr sgptr symsptr
-      allsyms <- peek symsptr >>= Arena.contents
+      allsyms <- peek symsptr >>= Slab.contents
       for (drop 1 allsyms) \sym ->
         B.packCStringLen (Symbol.symbol sym, fromIntegral (Symbol.symbol_len sym))
 
@@ -136,7 +139,7 @@ files sg =
   withStackGraph sg \sgptr -> do
     alloca @Files \symsptr -> do
       sg_stack_graph_files_ptr sgptr symsptr
-      allsyms <- Arena.contents' =<< peek symsptr
+      allsyms <- Slab.contents' =<< peek symsptr
       for (Vector.convert (Vector.drop 1 allsyms)) \sym ->
         B.packCStringLen (File.name sym, fromIntegral (File.name_len sym))
 
@@ -158,9 +161,20 @@ getOrCreateNodes sg nodes =
   where
     count :: Int = length nodes
 
-nodes :: StackGraph -> IO (Arena Node)
+nodes :: StackGraph -> IO (Slab Node)
 nodes sg =
   withStackGraph sg \sgptr -> do
     alloca @Nodes $ do
       sg_stack_graph_nodes_ptr sgptr
       peek
+
+-- * Edges
+
+foreign import capi unsafe "stack-graphs.h sg_stack_graph_add_edges"
+  sg_stack_graph_edges :: Ptr StackGraph -> CSize -> Ptr Edge -> IO ()
+
+addEdges :: StackGraph -> [Edge] -> IO ()
+addEdges sg edges =
+  withStackGraph sg \sgptr ->
+    withArray edges $
+      sg_stack_graph_edges sgptr (genericLength edges)

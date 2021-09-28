@@ -27,6 +27,14 @@ dependencies:
 - optics
 - generic-optics
 
+default-extensions:
+- ImportQualifiedPost
+- DerivingStrategies
+- DeriveGeneric
+- DeriveAnyClass
+- CApiFFI
+- GeneralizedNewtypeDeriving
+
 ghc-options: "-optc=-Wno-nullability-completeness -optc=-Wno-expansion-to-defined"
 
 library:
