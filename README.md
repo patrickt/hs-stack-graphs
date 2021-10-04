@@ -5,8 +5,9 @@ This is an experimental binding to the C interface of the [stack-graphs](https:/
 You _must_ use `stack` to develop this library, as `cabal` does not have the ability to specify a relative path to a dependent C library. Furthermore, you'll need to patch it with the included diff. (I don't know whether said diff should go upstream.)
 
 To play around with this:
-- `git clone`
+- clone the repo
 - `git submodule update --init --recursive`
 - `cd vendor/stack-graphs`
-- `g apply < ../../stackgraphs.diff`
+- `git apply < ../../stackgraphs.diff`
+- `cd ../..`
 - `stack test`
