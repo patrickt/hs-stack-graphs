@@ -3,6 +3,15 @@
 {-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE TypeApplications #-}
 
+-- | Contains a "database" of partial paths.
+--
+-- This type is meant to be a lazily loaded "view" into a proper storage layer.  During the
+-- path-stitching algorithm, we repeatedly try to extend a currently incomplete path with any
+-- partial paths that are compatible with it.  For large codebases, or projects with a large
+-- number of dependencies, it can be prohibitive to load in _all_ of the partial paths up-front.
+-- We've written the path-stitching algorithm so that you have a chance to only load in the
+-- partial paths that are actually needed, placing them into a 'Database'
+-- as they're needed.
 module StackGraph.C.Partial.Path.Database where
 
 import StackGraph.C.Partial.Path
